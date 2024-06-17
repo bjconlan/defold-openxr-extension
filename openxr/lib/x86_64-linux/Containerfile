@@ -1,0 +1,29 @@
+# podman run --rm -v .:/tmp:Z,rw $(podman build -q .)
+
+FROM docker.io/ubuntu:20.04
+ARG VERSION=1.1.38
+WORKDIR /root
+RUN apt update\
+ && DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt -y install --no-install-recommends\
+    build-essential\
+    cmake\
+    libgl1-mesa-dev\
+    libvulkan-dev\
+    libx11-xcb-dev\
+    libxcb-dri2-0-dev\
+    libxcb-glx0-dev\
+    libxcb-icccm4-dev\
+    libxcb-keysyms1-dev\
+    libxcb-randr0-dev\
+    libxrandr-dev\
+    libxxf86vm-dev\
+    mesa-common-dev\
+    python3
+ADD https://github.com/KhronosGroup/OpenXR-SDK-Source/releases/download/release-$VERSION/OpenXR-SDK-Source-release-$VERSION.tar.gz /root
+RUN tar -xzf OpenXR-SDK-Source-release-$VERSION.tar.gz\
+ && mkdir /root/OpenXR-SDK-Source-release-$VERSION/build\
+ && cd /root/OpenXR-SDK-Source-release-$VERSION/build\
+ && cmake -DCMAKE_BUILD_TYPE=Release ..\
+ && make -j$(nproc)\
+ && cp /root/OpenXR-SDK-Source-release-$VERSION/build/src/loader/libopenxr_loader.so.$VERSION /root/libopenxr_loader.so
+CMD cp /root/libopenxr_loader.so /tmp/libopenxr_loader.so

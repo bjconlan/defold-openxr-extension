@@ -1,0 +1,6 @@
+name: "openxr"
+
+platforms:
+  x86_64-linux:
+    context:
+      dynamicLibs: ["openxr_loader"]
