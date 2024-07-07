@@ -1,5 +1,6 @@
 [bootstrap]
 main_collection = /example/example.collectionc
+render = /builtins/render/default.renderc
 
 [script]
 shared_state = 1
@@ -12,5 +13,7 @@ height = 640
 title = myextension
 
 [library]
-include_dirs = myextension
+include_dirs = openxr
 
+[openxr]
+lib_path = openxr/res

@@ -4,52 +4,66 @@
 #include <dmsdk/sdk.h>
 
 //#if defined(DM_PLATFORM_ANDROID) || defined(DM_PLATFORM_WINDOWS) || defined(DM_PLATFORM_LINUX)
-#include <iostream>
-#include <vector>
-#include <openxr/openxr.h>
 
-inline const char* GetXRErrorString(XrInstance xrInstance, XrResult result) {
+#include "xr.hpp"
+#define XR_USE_GRAPHICS_API_OPENGL
+#include <openxr/openxr_platform.h>
+
+#include <vector>
+
+inline const char* GetXRErrorString(XrInstance instance, XrResult result) {
   static char string[XR_MAX_RESULT_STRING_SIZE];
-  xrResultToString(xrInstance, result, string);
+  xrResultToString(instance, result, string);
   return string;
 }
 
-static XrInstance xr_instance = nullptr;
+static XrInstance instance = XR_NULL_HANDLE;
+static XrSystemId systemId = XR_NULL_SYSTEM_ID;
+static XrSession session = XR_NULL_HANDLE;
 
 // lifecycle
 static int Init(lua_State* L) {
-  DM_LUA_STACK_CHECK(L, 2);
+  //DM_LUA_STACK_CHECK(L, 2);
 
-  if (!xr_instance) {
-    XrApplicationInfo app_info = {
-      "appName",
-      1,
-      "Defold",
-      1,
-      XR_CURRENT_API_VERSION
-    };
+  if (!instance) {
+    XrResult result = xrLoadAndCreateInstance([](auto apiLayerProperties, auto extensionProperties) {
+      dmLogInfo("API layers (%d):", static_cast<uint32_t>(apiLayerProperties.size()));
+      for (auto apiLayerProperty : apiLayerProperties) {
+        dmLogInfo("\t%s v%d: %s", apiLayerProperty.layerName, apiLayerProperty.layerVersion, apiLayerProperty.description);
+      }
 
-    std::vector<const char*> api_layer_names = {};
-    std::vector<const char*> extension_names = {};
+      dmLogInfo("Runtime supports %d extensions:", static_cast<uint32_t>(extensionProperties.size()));
+      for (auto extensionProperty : extensionProperties) {
+        dmLogInfo("\t%s v%d", extensionProperty.extensionName, extensionProperty.extensionVersion);
+      }
+      
+      std::vector<const char*> enabledApiLayerNames = {};
+      std::vector<const char*> enabledExtensionNames = {XR_EXT_DEBUG_UTILS_EXTENSION_NAME};
 
-    XrInstanceCreateInfo instance_create_info = {
-      XR_TYPE_INSTANCE_CREATE_INFO,
-      nullptr,
-      0,
-      app_info,
-      static_cast<uint32_t>(api_layer_names.size()),
-      api_layer_names.data(),
-      static_cast<uint32_t>(extension_names.size()),
-      extension_names.data()
-    };
+      return XrInstanceCreateInfo {
+        .type = XR_TYPE_INSTANCE_CREATE_INFO,
+        .next = nullptr,
+        .createFlags = 0,
+        .applicationInfo = {
+          .applicationName = "[todo: use project name]",
+          .applicationVersion = 1,
+          .engineName = "Defold",
+          .engineVersion = 0,
+          .apiVersion = XR_API_VERSION_1_0,
+        },
+        .enabledApiLayerCount = static_cast<uint32_t>(enabledApiLayerNames.size()),
+        .enabledApiLayerNames = enabledApiLayerNames.data(),
+        .enabledExtensionCount = static_cast<uint32_t>(enabledExtensionNames.size()),
+        .enabledExtensionNames = enabledExtensionNames.data(),
+      };
+    }, instance);
 
-    XrResult result = xrCreateInstance(&instance_create_info, &xr_instance);
-    if (!XR_SUCCEEDED(result)) {
-      std::cerr << "ERROR: OPENXR: " << int(result) << "(" << (xr_instance ? GetXRErrorString(xr_instance, result) : "") << ") " << "Failed to init xr_instance" << std::endl;
+    if (XR_FAILED(result)) {
+      dmLogInfo("%d (%s) Failed to init instance", int(result), (instance ? GetXRErrorString(instance, result) : ""));
     }
   }
-  
-  return 2;
+
+  return 0;
 }
 
 static int Update(lua_State* L) {
@@ -57,12 +71,15 @@ static int Update(lua_State* L) {
 }
 
 static int Restart(lua_State* L) {
-  DM_LUA_STACK_CHECK(L, 1);
-  return 1;
+  // DM_LUA_STACK_CHECK(L, 1);
+  // return 1;
+  return 0;
 }
 
 static int Final(lua_State* L) {
-  delete xr_instance;
+  if (instance) {
+    xrDestroyInstance(instance);
+  }
 
   return 0;
 }
@@ -76,18 +93,25 @@ static const luaL_reg Module_methods[] = {
 };
 
 static void LuaInit(lua_State* L) {
-  //int top = lua_gettop(L);
+  int top = lua_gettop(L);
+
+  // Register lua names
   luaL_register(L, MODULE_NAME, Module_methods);
+
+  lua_pop(L, 1);
+  assert(top == lua_gettop(L));
 }
 
 dmExtension::Result AppInitializeExtension(dmExtension::AppParams* params) {
-  
   return dmExtension::RESULT_OK;
 }
 
 dmExtension::Result InitializeExtension(dmExtension::Params* params) {
   LuaInit(params->m_L);
   dmLogInfo("Registered %s Extension", MODULE_NAME);
+
+  Init(params->m_L);
+  
   return dmExtension::RESULT_OK;
 }
 
