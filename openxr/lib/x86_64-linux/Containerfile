@@ -19,11 +19,29 @@ RUN apt update\
     libxxf86vm-dev\
     mesa-common-dev\
     python3
+
+#
+# llvm
+#
+RUN DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt -y install --no-install-recommends\
+    lsb-release wget software-properties-common gnupg
+ENV CLANG_VERSION=17
+RUN \
+  echo "LLVM + CLANG ${CLANG_VERSION}" && \
+  wget --no-check-certificate https://apt.llvm.org/llvm.sh && \
+  chmod +x llvm.sh && \
+  ./llvm.sh ${CLANG_VERSION} && \
+  rm llvm.sh
+
+ENV CLANG_17_HOME=/usr/lib/llvm-${CLANG_VERSION}
+# Possibly get the "-resource-dir" from clang++ -### empty.cpp
+ENV CLANG_17_RESOURCE_DIR=/usr/lib/llvm-${CLANG_VERSION}/lib/clang/${CLANG_VERSION}
+ENV PATH=${CLANG_17_HOME}/bin:$PATH
+
 ADD https://github.com/KhronosGroup/OpenXR-SDK-Source/releases/download/release-$VERSION/OpenXR-SDK-Source-release-$VERSION.tar.gz /root
 RUN tar -xzf OpenXR-SDK-Source-release-$VERSION.tar.gz\
  && mkdir /root/OpenXR-SDK-Source-release-$VERSION/build\
  && cd /root/OpenXR-SDK-Source-release-$VERSION/build\
- && cmake -DCMAKE_BUILD_TYPE=Release ..\
- && make -j$(nproc)\
- && cp /root/OpenXR-SDK-Source-release-$VERSION/build/src/loader/libopenxr_loader.so.$VERSION /root/libopenxr_loader.so
-CMD cp /root/libopenxr_loader.so /tmp/libopenxr_loader.so
+ && CXX=clang++ cmake -DDYNAMIC_LOADER=OFF -DCMAKE_BUILD_TYPE=Release -DBUILD_LOADER_WITH_EXCEPTION_HANDLING=OFF ..\
+ && make
+CMD cp /root/OpenXR-SDK-Source-release-*/build/src/loader/libopenxr_loader.a /tmp/.

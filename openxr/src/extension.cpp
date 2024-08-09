@@ -5,11 +5,10 @@
 
 //#if defined(DM_PLATFORM_ANDROID) || defined(DM_PLATFORM_WINDOWS) || defined(DM_PLATFORM_LINUX)
 
-#include "xr.hpp"
+#include <vector>
+
 #define XR_USE_GRAPHICS_API_OPENGL
 #include <openxr/openxr_platform.h>
-
-#include <vector>
 
 inline const char* GetXRErrorString(XrInstance instance, XrResult result) {
   static char string[XR_MAX_RESULT_STRING_SIZE];
@@ -26,39 +25,37 @@ static int Init(lua_State* L) {
   //DM_LUA_STACK_CHECK(L, 2);
 
   if (!instance) {
-    XrResult result = xrLoadAndCreateInstance([](auto apiLayerProperties, auto extensionProperties) {
-      dmLogInfo("API layers (%d):", static_cast<uint32_t>(apiLayerProperties.size()));
-      for (auto apiLayerProperty : apiLayerProperties) {
-        dmLogInfo("\t%s v%d: %s", apiLayerProperty.layerName, apiLayerProperty.layerVersion, apiLayerProperty.description);
-      }
-
-      dmLogInfo("Runtime supports %d extensions:", static_cast<uint32_t>(extensionProperties.size()));
-      for (auto extensionProperty : extensionProperties) {
-        dmLogInfo("\t%s v%d", extensionProperty.extensionName, extensionProperty.extensionVersion);
-      }
+//       dmLogInfo("API layers (%d):", static_cast<uint32_t>(apiLayerProperties.size()));
+//       for (auto apiLayerProperty : apiLayerProperties) {
+//         dmLogInfo("\t%s v%d: %s", apiLayerProperty.layerName, apiLayerProperty.layerVersion, apiLayerProperty.description);
+//       }
+// 
+//       dmLogInfo("Runtime supports %d extensions:", static_cast<uint32_t>(extensionProperties.size()));
+//       for (auto extensionProperty : extensionProperties) {
+//         dmLogInfo("\t%s v%d", extensionProperty.extensionName, extensionProperty.extensionVersion);
+//       }
       
-      std::vector<const char*> enabledApiLayerNames = {};
-      std::vector<const char*> enabledExtensionNames = {XR_EXT_DEBUG_UTILS_EXTENSION_NAME};
+    std::vector<const char*> enabledApiLayerNames = {};
+    std::vector<const char*> enabledExtensionNames = {XR_EXT_DEBUG_UTILS_EXTENSION_NAME};
 
-      return XrInstanceCreateInfo {
-        .type = XR_TYPE_INSTANCE_CREATE_INFO,
-        .next = nullptr,
-        .createFlags = 0,
-        .applicationInfo = {
-          .applicationName = "[todo: use project name]",
-          .applicationVersion = 1,
-          .engineName = "Defold",
-          .engineVersion = 0,
-          .apiVersion = XR_API_VERSION_1_0,
-        },
-        .enabledApiLayerCount = static_cast<uint32_t>(enabledApiLayerNames.size()),
-        .enabledApiLayerNames = enabledApiLayerNames.data(),
-        .enabledExtensionCount = static_cast<uint32_t>(enabledExtensionNames.size()),
-        .enabledExtensionNames = enabledExtensionNames.data(),
-      };
-    }, instance);
+    XrInstanceCreateInfo createInfo{
+      .type = XR_TYPE_INSTANCE_CREATE_INFO,
+      .next = nullptr,
+      .createFlags = 0,
+      .applicationInfo = {
+        .applicationName = "[todo: use project name]",
+        .applicationVersion = 1,
+        .engineName = "Defold",
+        .engineVersion = 0,
+        .apiVersion = XR_API_VERSION_1_0,
+      },
+      .enabledApiLayerCount = static_cast<uint32_t>(enabledApiLayerNames.size()),
+      .enabledApiLayerNames = enabledApiLayerNames.data(),
+      .enabledExtensionCount = static_cast<uint32_t>(enabledExtensionNames.size()),
+      .enabledExtensionNames = enabledExtensionNames.data(),
+    };
 
-    if (XR_FAILED(result)) {
+    if (auto result = xrCreateInstance(&createInfo, &instance); XR_FAILED(result)) {
       dmLogInfo("%d (%s) Failed to init instance", int(result), (instance ? GetXRErrorString(instance, result) : ""));
     }
   }
@@ -127,20 +124,20 @@ static void OnEventExtension(dmExtension::Params* params, const dmExtension::Eve
   switch(event->m_Event)
   {
     case dmExtension::EVENT_ID_ACTIVATEAPP:
-    dmLogInfo("OnEventMyExtension - EVENT_ID_ACTIVATEAPP");
-    break;
+      dmLogInfo("EVENT_ID_ACTIVATEAPP");
+      break;
     case dmExtension::EVENT_ID_DEACTIVATEAPP:
-    dmLogInfo("OnEventMyExtension - EVENT_ID_DEACTIVATEAPP");
-    break;
+      dmLogInfo("EVENT_ID_DEACTIVATEAPP");
+      break;
     case dmExtension::EVENT_ID_ICONIFYAPP:
-    dmLogInfo("OnEventMyExtension - EVENT_ID_ICONIFYAPP");
-    break;
+      dmLogInfo("EVENT_ID_ICONIFYAPP");
+      break;
     case dmExtension::EVENT_ID_DEICONIFYAPP:
-    dmLogInfo("OnEventMyExtension - EVENT_ID_DEICONIFYAPP");
-    break;
+      dmLogInfo("EVENT_ID_DEICONIFYAPP");
+      break;
     default:
-    dmLogWarning("OnEventMyExtension - Unknown event id");
-    break;
+      dmLogWarning("Unknown event id");
+      break;
   }
 }
 

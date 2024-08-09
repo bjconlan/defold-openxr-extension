@@ -1,1 +1,11 @@
-name: "openxr"
+name: openxr
+
+#platforms:
+#    x86_64-linux:
+#        context:
+#            flags:      ["-std=c++17"]
+#            excludeLibs: [graphics]
+#            excludeSymbols: [GraphicsAdapterOpenGL]
+#            symbols: [GraphicsAdapterVulkan]
+#            libs: [graphics_vulkan, X11-xcb]
+#            dynamicLibs: [vulkan]
