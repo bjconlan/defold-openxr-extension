@@ -2,6 +2,8 @@ function init(self)
 	-- local s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	-- local reverse_s = myextension.reverse(s)
 	-- print(reverse_s) --> ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba
+	msg.post("/go#camera", "enable")
+	-- openxr.session()
 end
 
 function final(self)

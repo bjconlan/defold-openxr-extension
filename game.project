@@ -1,6 +1,6 @@
 [bootstrap]
 main_collection = /example/example.collectionc
-render = /builtins/render/default.renderc
+render = /example/cam.renderc
 
 [script]
 shared_state = 1
@@ -10,10 +10,14 @@ width = 960
 height = 640
 
 [project]
-title = myextension
+title = openxr-extension
 
 [library]
 include_dirs = openxr
 
-[openxr]
-lib_path = openxr/res
+[physics]
+type = 3D
+
+[render]
+clear_color_green = 0.5
+

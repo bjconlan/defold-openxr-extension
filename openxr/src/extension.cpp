@@ -1,12 +1,15 @@
 #define LIB_NAME "OpenXR"
 #define MODULE_NAME "openxr"
 
+#include <GL/glx.h>
+#include <X11/Xlib.h>
 #include <dmsdk/sdk.h>
 
 //#if defined(DM_PLATFORM_ANDROID) || defined(DM_PLATFORM_WINDOWS) || defined(DM_PLATFORM_LINUX)
 
 #include <vector>
 
+#define XR_USE_PLATFORM_XLIB
 #define XR_USE_GRAPHICS_API_OPENGL
 #include <openxr/openxr_platform.h>
 
@@ -19,24 +22,45 @@ inline const char* GetXRErrorString(XrInstance instance, XrResult result) {
 static XrInstance instance = XR_NULL_HANDLE;
 static XrSystemId systemId = XR_NULL_SYSTEM_ID;
 static XrSession session = XR_NULL_HANDLE;
-
+static PFN_xrGetOpenGLGraphicsRequirementsKHR pfnGetOpenGLGraphicsRequirementsKHR = nullptr;
 // lifecycle
+
+// initialization inputs to be resolved before init:
+// renderer: opengl|opengles|vulkan (automatically resolved)
+// apiLayerProperties & extensionProperties (user supplied/partially automatically resolved from renderer) 
+
+// configurable options
+XrFormFactor formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
+XrViewConfigurationType viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+XrReferenceSpaceType referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
+
 static int Init(lua_State* L) {
   //DM_LUA_STACK_CHECK(L, 2);
 
   if (!instance) {
-//       dmLogInfo("API layers (%d):", static_cast<uint32_t>(apiLayerProperties.size()));
-//       for (auto apiLayerProperty : apiLayerProperties) {
-//         dmLogInfo("\t%s v%d: %s", apiLayerProperty.layerName, apiLayerProperty.layerVersion, apiLayerProperty.description);
-//       }
-// 
-//       dmLogInfo("Runtime supports %d extensions:", static_cast<uint32_t>(extensionProperties.size()));
-//       for (auto extensionProperty : extensionProperties) {
-//         dmLogInfo("\t%s v%d", extensionProperty.extensionName, extensionProperty.extensionVersion);
-//       }
+    uint32_t apiLayerCount = 0;
+    XrResult result = xrEnumerateApiLayerProperties(0, &apiLayerCount, nullptr);
+    std::vector<XrApiLayerProperties> apiLayerProperties = {apiLayerCount, {XR_TYPE_API_LAYER_PROPERTIES}};
+    result = xrEnumerateApiLayerProperties(apiLayerCount, &apiLayerCount, apiLayerProperties.data());
+    dmLogDebug("API layers (%d):", static_cast<uint32_t>(apiLayerProperties.size()));
+    for (auto apiLayerProperty : apiLayerProperties) {
+      dmLogDebug("\t%s v%d: %s", apiLayerProperty.layerName, apiLayerProperty.layerVersion, apiLayerProperty.description);
+    }
+
+    uint32_t extensionCount = 0;
+    result = xrEnumerateInstanceExtensionProperties(nullptr, 0, &extensionCount, nullptr);
+    std::vector<XrExtensionProperties> extensionProperties = {extensionCount, {XR_TYPE_EXTENSION_PROPERTIES}};
+    result = xrEnumerateInstanceExtensionProperties(nullptr, extensionCount, &extensionCount, extensionProperties.data());
+    dmLogDebug("Runtime supports %d extensions:", static_cast<uint32_t>(extensionProperties.size()));
+    for (auto extensionProperty : extensionProperties) {
+      dmLogDebug("\t%s v%d", extensionProperty.extensionName, extensionProperty.extensionVersion);
+    }
       
     std::vector<const char*> enabledApiLayerNames = {};
-    std::vector<const char*> enabledExtensionNames = {XR_EXT_DEBUG_UTILS_EXTENSION_NAME};
+    std::vector<const char*> enabledExtensionNames = {
+      XR_EXT_DEBUG_UTILS_EXTENSION_NAME,
+      XR_KHR_OPENGL_ENABLE_EXTENSION_NAME
+    };
 
     XrInstanceCreateInfo createInfo{
       .type = XR_TYPE_INSTANCE_CREATE_INFO,
@@ -47,7 +71,7 @@ static int Init(lua_State* L) {
         .applicationVersion = 1,
         .engineName = "Defold",
         .engineVersion = 0,
-        .apiVersion = XR_API_VERSION_1_0,
+        .apiVersion = XR_CURRENT_API_VERSION,
       },
       .enabledApiLayerCount = static_cast<uint32_t>(enabledApiLayerNames.size()),
       .enabledApiLayerNames = enabledApiLayerNames.data(),
@@ -56,8 +80,102 @@ static int Init(lua_State* L) {
     };
 
     if (auto result = xrCreateInstance(&createInfo, &instance); XR_FAILED(result)) {
-      dmLogInfo("%d (%s) Failed to init instance", int(result), (instance ? GetXRErrorString(instance, result) : ""));
+      dmLogFatal("%d (%s) Failed to init instance", int(result), (instance ? GetXRErrorString(instance, result) : ""));
+      return result;
     }
+
+    XrInstanceProperties instanceProperties = {
+      .type = XR_TYPE_INSTANCE_PROPERTIES,
+      .next = nullptr
+    };
+    result = xrGetInstanceProperties(instance, &instanceProperties);
+    dmLogInfo("Runtime Name: %s", instanceProperties.runtimeName);
+    dmLogInfo("Runtime Version: %d.%d.%d", 
+      (uint32_t)(((uint64_t)instanceProperties.runtimeVersion >> 48) & 0xffffULL),
+      (uint32_t)(((uint64_t)instanceProperties.runtimeVersion >> 32) & 0xffffULL), 
+      (uint32_t)(((uint64_t)instanceProperties.runtimeVersion) & 0xffffffffULL));
+
+    XrSystemGetInfo systemGetInfo = {
+      .type = XR_TYPE_SYSTEM_GET_INFO,
+      .next = nullptr,
+      .formFactor = formFactor
+    };
+    if (auto result = xrGetSystem(instance, &systemGetInfo, &systemId); XR_FAILED(result)) {
+      dmLogFatal("%d (%s) Failed to get system for HMD form factor", int(result), GetXRErrorString(instance, result));
+      return result;
+    }
+    dmLogInfo("Successfully got XrSystem with id %lu for HMD form factor", systemId);
+
+    XrSystemProperties systemProperties = {
+      .type = XR_TYPE_SYSTEM_PROPERTIES,
+      .next = nullptr
+    };
+    if (auto result = xrGetSystemProperties(instance, systemId, &systemProperties); XR_FAILED(result)) {
+      dmLogFatal("Failed to get system properties");
+      return result;
+    }
+    dmLogInfo("System properties for system %lu: \"%s\", vendor ID %d",
+      systemProperties.systemId, systemProperties.systemName, systemProperties.vendorId);
+    dmLogInfo("\tMax layers          : %d", systemProperties.graphicsProperties.maxLayerCount);
+    dmLogInfo("\tMax swapchain height: %d", systemProperties.graphicsProperties.maxSwapchainImageHeight);
+    dmLogInfo("\tMax swapchain width : %d", systemProperties.graphicsProperties.maxSwapchainImageWidth);
+    dmLogInfo("\tOrientation Tracking: %d", systemProperties.trackingProperties.orientationTracking);
+    dmLogInfo("\tPosition Tracking   : %d", systemProperties.trackingProperties.positionTracking);
+
+    uint32_t viewConfigurationCount = 0;    
+    if (auto result = xrEnumerateViewConfigurationViews(instance, systemId, viewConfigurationType, 0, &viewConfigurationCount, NULL); XR_FAILED(result)) {
+      dmLogFatal("Failed to get view configuration count");
+      return result;
+    }
+    std::vector<XrViewConfigurationView> viewConfigurations = {viewConfigurationCount, {XR_TYPE_VIEW_CONFIGURATION_VIEW}};
+    if (auto result = xrEnumerateViewConfigurationViews(instance, systemId, viewConfigurationType, viewConfigurationCount, &viewConfigurationCount, viewConfigurations.data()); XR_FAILED(result)) {
+      dmLogFatal("Failed to enumerate view configuration views");
+      return result;
+    }
+    for (auto viewConfiguration : viewConfigurations) {
+      dmLogInfo("View Configuration View:");
+      dmLogInfo("\tResolution       : Recommended %dx%d, Max: %dx%d",
+        viewConfiguration.recommendedImageRectWidth,
+        viewConfiguration.recommendedImageRectHeight,
+        viewConfiguration.maxImageRectWidth,
+        viewConfiguration.maxImageRectHeight);
+      dmLogInfo("\tSwapchain Samples: Recommended: %d, Max: %d)",
+        viewConfiguration.recommendedSwapchainSampleCount,
+        viewConfiguration.maxSwapchainSampleCount);
+    }
+
+    if (auto result = xrGetInstanceProcAddr(instance, "xrGetOpenGLGraphicsRequirementsKHR", (PFN_xrVoidFunction*)&pfnGetOpenGLGraphicsRequirementsKHR); XR_FAILED(result)) {
+      dmLogFatal("Failed to get OpenGL graphics requirements function!");
+      return result;
+    }
+    
+    XrGraphicsRequirementsOpenGLKHR openglReqs = {
+      .type = XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR,
+      .next = NULL
+    };
+    if (auto result = pfnGetOpenGLGraphicsRequirementsKHR(instance, systemId, &openglReqs); XR_FAILED(result)) {
+      dmLogFatal("Failed to get OpenGl graphics requirements");
+      return result;
+    }
+    dmLogInfo("GL requirements: min %lu, max: %lu", openglReqs.minApiVersionSupported, openglReqs.maxApiVersionSupported);
+
+    XrGraphicsBindingOpenGLXlibKHR graphicsBindingGl = {
+      .type = XR_TYPE_GRAPHICS_BINDING_OPENGL_XLIB_KHR,
+      .xDisplay = XOpenDisplay(NULL),
+      .glxDrawable = glXGetCurrentDrawable(),
+      .glxContext = dmGraphics::GetNativeX11GLXContext(),
+    };
+
+    XrSessionCreateInfo sessionCreateInfo = {
+      .type = XR_TYPE_SESSION_CREATE_INFO,
+      .next = &graphicsBindingGl,
+      .systemId = systemId
+    };
+    if (auto result = xrCreateSession(instance, &sessionCreateInfo, &session); XR_FAILED(result)) {
+      dmLogFatal("Failed to create session");
+      return result;
+    }
+    dmLogInfo("Successfully bound openxr gl context");
   }
 
   return 0;
@@ -76,6 +194,10 @@ static int Restart(lua_State* L) {
 static int Final(lua_State* L) {
   if (instance) {
     xrDestroyInstance(instance);
+  }
+
+  if (session) {
+    xrDestroySession(session);
   }
 
   return 0;
