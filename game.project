@@ -1,6 +1,5 @@
 [bootstrap]
 main_collection = /example/example.collectionc
-render = /example/cam.renderc
 
 [script]
 shared_state = 1
@@ -17,7 +16,4 @@ include_dirs = openxr
 
 [physics]
 type = 3D
-
-[render]
-clear_color_green = 0.5
 

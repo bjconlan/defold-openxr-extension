@@ -1,32 +1,29 @@
 function init(self)
-	-- local s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	-- local reverse_s = myextension.reverse(s)
-	-- print(reverse_s) --> ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba
-	msg.post("/go#camera", "enable")
-	-- openxr.session()
-end
+	msg.post(".", "acquire_input_focus")
+	msg.post("@render:", "use_camera_projection")
+	msg.post("camera", "acquire_camera_focus")
 
-function final(self)
-	-- Add finalization code here
-	-- Remove this function if not needed
-end
+	-- rotate the cube
+	-- go.animate(".", "euler.z", go.PLAYBACK_LOOP_FORWARD, 360, go.EASING_INOUTQUAD, 6)
+	-- go.animate(".", "euler.x", go.PLAYBACK_LOOP_FORWARD, 360, go.EASING_INOUTQUAD, 9)
+	-- go.animate(".", "euler.y", go.PLAYBACK_LOOP_FORWARD, 360, go.EASING_INOUTQUAD, 12)
 
-function update(self, dt)
-	-- Add update code here
-	-- Remove this function if not needed
-end
+	-- tint the cube and the sphere
+	go.set("#cube", "tint", vmath.vector4(1,1,0,1))
+	-- go.set("#sphere", "tint", vmath.vector4(1,0,0,1))
 
-function on_message(self, message_id, message, sender)
-	-- Add message-handling code here
-	-- Remove this function if not needed
+	-- position directional light
+	self.light = vmath.vector4(0, 0, go.get_position().z + 1, 0)
+	go.set("#cube", "light", self.light)
+	-- go.set("#quad", "light", self.light)
+	-- go.set("#sphere", "light", self.light)
 end
 
 function on_input(self, action_id, action)
-	-- Add input-handling code here
-	-- Remove this function if not needed
-end
-
-function on_reload(self)
-	-- Add reload-handling code here
-	-- Remove this function if not needed
+	-- move directional light based on input
+	self.light.x = 2 * ((action.x - 480) / 480)
+	self.light.y = 2 * ((action.y - 320) / 320)
+	go.set("#cube", "light", self.light)
+	-- go.set("#quad", "light", self.light)
+	-- go.set("#sphere", "light", self.light)
 end

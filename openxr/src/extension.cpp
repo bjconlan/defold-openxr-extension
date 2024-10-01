@@ -22,8 +22,19 @@ inline const char* GetXRErrorString(XrInstance instance, XrResult result) {
 static XrInstance instance = XR_NULL_HANDLE;
 static XrSystemId systemId = XR_NULL_SYSTEM_ID;
 static XrSession session = XR_NULL_HANDLE;
+static XrSpace space = XR_NULL_HANDLE;
 static PFN_xrGetOpenGLGraphicsRequirementsKHR pfnGetOpenGLGraphicsRequirementsKHR = nullptr;
 // lifecycle
+static XrPosef identityPose = {
+  .orientation = {.x = 0, .y = 0, .z = 0, .w = 1.0},
+  .position = {.x = 0, .y = 0, .z = 0}
+};
+
+
+static auto views = std::vector<XrView>(2);
+static auto swapchains = std::vector<XrSwapchain>(2);
+static auto swapchainLengths = std::vector<uint32_t>(2);
+// static auto images = std::vector<XrSwapchainImageOpenGLKHR*>(3);
 
 // initialization inputs to be resolved before init:
 // renderer: opengl|opengles|vulkan (automatically resolved)
@@ -176,6 +187,69 @@ static int Init(lua_State* L) {
       return result;
     }
     dmLogInfo("Successfully bound openxr gl context");
+
+
+    XrReferenceSpaceCreateInfo referenceSpaceCreateinfo = {
+      .type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
+      .next = nullptr,
+      .referenceSpaceType = referenceSpaceType,
+      .poseInReferenceSpace = identityPose
+    };
+    if (result = xrCreateReferenceSpace(session, &referenceSpaceCreateinfo, &space); XR_FAILED(result)) {
+      dmLogFatal("Failed to create play space!");
+      return 1;
+    }
+
+    uint32_t swapchainFormatCount;
+    if (auto result = xrEnumerateSwapchainFormats(session, 0, &swapchainFormatCount, NULL); XR_FAILED(result)) {
+      dmLogFatal("Failed to get number of supported swapchain formats");
+      return result;
+    }
+    auto swapchainFormats = std::vector<int64_t>(swapchainFormatCount);
+    if (auto result = xrEnumerateSwapchainFormats(session, swapchainFormatCount, &swapchainFormatCount, swapchainFormats.data()); XR_FAILED(result)) {
+      dmLogFatal("Failed to get number of supported swapchain formats");
+      return result;
+    }
+    for (auto swapchainFormat : swapchainFormats) {
+      dmLogInfo("Supported GL format: %#lx", swapchainFormat);
+      if (swapchainFormat == GL_SRGB8_ALPHA8_EXT) {
+        dmLogInfo("found SRGB888_ALPHA8");        
+      }
+      // if (swapchainFormat == GL_DEPTH_COMPONENT16) {
+      //   dmLogInfo("found GL_DEPTH_COMPONENT16");
+      // } ignore depth creation for the moment
+    }
+
+    for (uint32_t i = 0; i < viewConfigurationCount; i++) {
+      XrSwapchainCreateInfo swapchainCreateInfo = {
+        .type = XR_TYPE_SWAPCHAIN_CREATE_INFO,
+        .usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT,
+        .createFlags = 0,
+        .format = GL_SRGB8_ALPHA8_EXT,
+        .sampleCount = viewConfigurations[i].recommendedSwapchainSampleCount,
+        .width = viewConfigurations[i].recommendedImageRectWidth,
+        .height = viewConfigurations[i].recommendedImageRectHeight,
+        .faceCount = 1,
+        .arraySize = 1,
+        .mipCount = 1,
+        .next = NULL,
+      };
+
+      if (auto result = xrCreateSwapchain(session, &swapchainCreateInfo, &swapchains[i]); XR_FAILED(result)) {
+        dmLogFatal("Failed to create swapchain %d", i);
+        return result;
+      }
+      if (auto result = xrEnumerateSwapchainImages(swapchains[i], 0, &swapchainLengths[i], NULL); XR_FAILED(result)) {
+        dmLogFatal("Failed to enumerate swapchains");
+        return result;
+      }
+      dmLogInfo("swapchain %d's length: %d", i, swapchainLengths[i]);
+      
+    }
+    
+    // line 880
+    //std::vector<XrSwapchain> swapchains = {viewConfigurationCount, {XR_TYPE_SWAPCHAIN_CREATE_INFO}};
+    //std::vector<XrSwapchainImageOpenGLKHR> images = {viewConfigurationCount, {}}
   }
 
   return 0;
